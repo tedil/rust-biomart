@@ -1,14 +1,77 @@
-use csv::StringRecord;
-use itertools::Itertools;
-use maplit::hashmap;
-use serde::export::fmt::Debug;
-use serde::{Deserialize, Deserializer};
-use serde_derive::Deserialize;
-use serde_xml_rs::from_reader;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+
+use csv::StringRecord;
+use itertools::Itertools;
+use maplit::hashmap;
+use serde::de::Unexpected;
+use serde::export::fmt::Debug;
+use serde::{de, Deserialize, Deserializer};
+use serde_derive::Deserialize;
+use serde_xml_rs::from_reader;
 use xmltree::{Element, XMLNode};
+
+pub struct MartClient {
+    server: String,
+    client: reqwest::blocking::Client,
+}
+
+impl MartClient {
+    pub fn new(server: String) -> Self {
+        MartClient {
+            server,
+            client: reqwest::blocking::Client::new(),
+        }
+    }
+
+    fn make_request(&self, query: &[(&str, &str)]) -> Result<String, Box<dyn Error>> {
+        let response = self.client.post(&self.server).query(query).send()?;
+        if response.status().is_success() {
+            let xml = response.text()?;
+            Ok(xml)
+        } else {
+            Err(Box::new(StatusError(response.status())))
+        }
+    }
+
+    fn request_and_parse<P, R>(
+        &self,
+        query: &[(&str, &str)],
+        parser: P,
+    ) -> Result<R, Box<dyn Error>>
+    where
+        P: FnOnce(String) -> Result<R, Box<dyn Error>>,
+    {
+        self.make_request(query).and_then(parser)
+    }
+
+    pub fn query(&self, query: &Query) -> Result<Response, Box<dyn Error>> {
+        let s = query.to_string();
+        self.make_request(&[("query", &s)])
+            .map(|xml| Response { raw: xml })
+    }
+
+    pub fn marts(&self) -> Result<Vec<MartInfo>, Box<dyn Error>> {
+        self.request_and_parse(&[("type", "registry")], |xml| {
+            let registry: MartRegistry = from_reader(xml.as_bytes())
+                .unwrap_or_else(|_| panic!("Failed parsing xml: {:?}", &xml));
+            Ok(registry.marts)
+        })
+    }
+
+    pub fn datasets(&self, mart: &str) -> Result<Vec<DatasetInfo>, Box<dyn Error>> {
+        self.request_and_parse(&[("mart", mart), ("type", "datasets")], |xml| {
+            Ok(csv::ReaderBuilder::new()
+                .has_headers(false)
+                .delimiter(b'\t')
+                .from_reader(xml.trim().as_bytes())
+                .deserialize::<DatasetInfo>()
+                .filter_map(Result::ok)
+                .collect())
+        })
+    }
+}
 
 #[derive(Debug)]
 pub struct Response {
@@ -26,74 +89,30 @@ impl Response {
     }
 }
 
-pub struct MartClient {
-    server: String,
-    client: reqwest::blocking::Client,
-}
-
-impl MartClient {
-    pub fn new(server: String) -> Self {
-        MartClient {
-            server,
-            client: reqwest::blocking::Client::new(),
-        }
-    }
-
-    pub fn query(&self, query: &Query) -> Result<Response, Box<dyn Error>> {
-        let url = &self.server;
-        let s = query.to_string();
-
-        let response = self.client.post(url).query(&[("query", s)]).send().unwrap();
-        if response.status().is_success() {
-            Ok(Response {
-                raw: response.text()?,
-            })
-        } else if response.status().is_server_error() {
-            Err(Box::new(ServerError))
-        } else {
-            Err(Box::new(StatusError(response.status())))
-        }
-    }
-
-    pub fn marts(&self) -> Result<Vec<MartURLLocation>, Box<dyn Error>> {
-        let response = self
-            .client
-            .post(&self.server)
-            .query(&[("type", "registry")])
-            .send()
-            .unwrap();
-        if response.status().is_success() {
-            let xml = response.text()?;
-            let registry: MartRegistry = from_reader(xml.as_bytes())?;
-            Ok(registry.marts)
-        } else {
-            Err(Box::new(StatusError(response.status())))
-        }
-    }
-}
-
-fn default_on_error_deserializer<'de, D, T>(d: D) -> Result<T, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Default + FromStr + Deserialize<'de>,
-    <T as std::str::FromStr>::Err: Debug,
-{
-    let v = T::deserialize(d);
-    match v {
-        Ok(v) => Ok(v),
-        _ => Ok(T::default()),
-    }
+#[derive(Debug, Deserialize)]
+pub struct DatasetInfo {
+    kind: String,
+    dataset: String,
+    description: String,
+    #[serde(deserialize_with = "bool_from_int")]
+    visible: bool,
+    version: String,
+    unknown_1: usize,
+    unknown_2: usize,
+    unknown_3: String,
+    date: String,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
 pub struct MartRegistry {
     #[serde(rename = "MartURLLocation", default)]
-    pub marts: Vec<MartURLLocation>,
+    pub marts: Vec<MartInfo>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct MartURLLocation {
+#[serde(rename = "MartURLLocation")]
+pub struct MartInfo {
     pub host: String,
     pub port: usize,
     pub database: String,
@@ -110,28 +129,6 @@ pub struct MartURLLocation {
     pub display_name: String,
     pub path: String,
     pub name: String,
-}
-
-#[derive(Debug)]
-struct ServerError;
-
-#[derive(Debug)]
-struct StatusError(reqwest::StatusCode);
-
-impl Error for ServerError {}
-
-impl Error for StatusError {}
-
-impl Display for ServerError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        f.write_str("Server error")
-    }
-}
-
-impl Display for StatusError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        f.write_fmt(format_args!("Error, status code: {}", self.0))
-    }
 }
 
 enum FilterOperation {
@@ -296,10 +293,60 @@ impl QueryBuilder {
     }
 }
 
+fn default_on_error_deserializer<'de, D, T>(d: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Default + FromStr + Deserialize<'de>,
+    <T as std::str::FromStr>::Err: Debug,
+{
+    let v = T::deserialize(d);
+    match v {
+        Ok(v) => Ok(v),
+        _ => Ok(T::default()),
+    }
+}
+
+fn bool_from_int<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    match u8::deserialize(deserializer)? {
+        0 => Ok(false),
+        1 => Ok(true),
+        other => Err(de::Error::invalid_value(
+            Unexpected::Unsigned(other as u64),
+            &"zero or one",
+        )),
+    }
+}
+
+#[derive(Debug)]
+struct ServerError;
+
+#[derive(Debug)]
+struct StatusError(reqwest::StatusCode);
+
+impl Error for ServerError {}
+
+impl Error for StatusError {}
+
+impl Display for ServerError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        f.write_str("Server error")
+    }
+}
+
+impl Display for StatusError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        f.write_fmt(format_args!("Error, status code: {}", self.0))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{MartClient, MartRegistry, MartURLLocation, QueryBuilder};
     use serde_xml_rs::from_reader;
+
+    use crate::{MartClient, MartInfo, MartRegistry, QueryBuilder};
 
     #[test]
     fn it_works() {
@@ -325,13 +372,21 @@ mod tests {
     }
 
     #[test]
+    fn list_datasets() {
+        let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice".into());
+        let datasets = mart_client.datasets("ENSEMBL_MART_ENSEMBL");
+        dbg!(datasets);
+        assert_eq!(true, false);
+    }
+
+    #[test]
     fn parse_marts() {
         let data = r##"<MartRegistry>
     <MartURLLocation database="ensembl_mart_99" default="1" displayName="Ensembl Genes 99" host="www.ensembl.org" includeDatasets="" martUser="" name="ENSEMBL_MART_ENSEMBL" path="/biomart/martservice" port="80" serverVirtualSchema="default" visible="1" />
 </MartRegistry>"##;
         let registry: MartRegistry = from_reader(data.as_bytes()).unwrap();
         let expected = MartRegistry {
-            marts: vec![MartURLLocation {
+            marts: vec![MartInfo {
                 host: "www.ensembl.org".to_string(),
                 port: 80,
                 database: "ensembl_mart_99".to_string(),

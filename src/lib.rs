@@ -134,10 +134,16 @@ impl Display for StatusError {
     }
 }
 
+enum FilterOperation {
+    Match(Vec<String>),
+    Include,
+    Exclude,
+}
+
 pub struct QueryBuilder {
     mart: String,
     dataset: String,
-    filters: Vec<(String, Vec<String>)>,
+    filters: Vec<(String, FilterOperation)>,
     attributes: Vec<String>,
 }
 
@@ -201,14 +207,27 @@ impl QueryBuilder {
         self
     }
 
-    pub fn filter<S: Into<String>, I: IntoIterator<Item = S>>(
-        &mut self,
-        filter: S,
-        values: I,
-    ) -> &mut Self {
+    pub fn filter<T, S, I>(&mut self, filter: S, values: I) -> &mut Self
+    where
+        T: Into<String>,
+        S: Into<String>,
+        I: IntoIterator<Item = T>,
+    {
         self.filters.push((
             filter.into(),
-            values.into_iter().map(|s| s.into()).collect(),
+            FilterOperation::Match(values.into_iter().map(|s| s.into()).collect()),
+        ));
+        self
+    }
+
+    pub fn filter_bool<S: Into<String>>(&mut self, filter: S, include: bool) -> &mut Self {
+        self.filters.push((
+            filter.into(),
+            if include {
+                FilterOperation::Include
+            } else {
+                FilterOperation::Exclude
+            },
         ));
         self
     }
@@ -240,13 +259,25 @@ impl QueryBuilder {
 
         for (filter, values) in &self.filters {
             let v = query.inner.get_mut_child("Dataset").expect("dataset");
-            let values: String = values.iter().join(",");
+            let attributes = match values {
+                FilterOperation::Match(values) => {
+                    let s: String = values.iter().join(",");
+                    hashmap! {"name".into() => filter.to_string(), "value".into() => s}
+                }
+                FilterOperation::Exclude => {
+                    hashmap! {"name".into() => filter.to_string(), "excluded".into() => "1".into()}
+                }
+                FilterOperation::Include => {
+                    hashmap! {"name".into() => filter.to_string(), "excluded".into() => "0".into()}
+                }
+            };
+
             v.children.push(XMLNode::Element(Element {
                 prefix: None,
                 namespace: None,
                 namespaces: None,
                 name: "Filter".into(),
-                attributes: hashmap! {"name".into() => filter.to_string(), "value".into() => values},
+                attributes,
                 children: vec![],
             }))
         }

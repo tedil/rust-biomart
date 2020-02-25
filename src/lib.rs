@@ -376,7 +376,6 @@ mod tests {
         let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice".into());
         let datasets = mart_client.datasets("ENSEMBL_MART_ENSEMBL");
         dbg!(datasets);
-        assert_eq!(true, false);
     }
 
     #[test]

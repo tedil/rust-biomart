@@ -14,3 +14,6 @@ itertools = "0.8.2"
 xmltree = "0.10"
 maplit = "1.0"
 csv = "1.1"
+serde-xml-rs = { git = "https://github.com/RReverser/serde-xml-rs.git" }
+serde = "1.0"
+serde_derive = "1.0"

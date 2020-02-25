@@ -1,8 +1,13 @@
 use csv::StringRecord;
 use itertools::Itertools;
 use maplit::hashmap;
+use serde::export::fmt::Debug;
+use serde::{Deserialize, Deserializer};
+use serde_derive::Deserialize;
+use serde_xml_rs::from_reader;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 use xmltree::{Element, XMLNode};
 
 #[derive(Debug)]
@@ -49,14 +54,74 @@ impl MartClient {
             Err(Box::new(StatusError(response.status())))
         }
     }
+
+    pub fn marts(&self) -> Result<Vec<MartURLLocation>, Box<dyn Error>> {
+        let response = self
+            .client
+            .post(&self.server)
+            .query(&[("type", "registry")])
+            .send()
+            .unwrap();
+        if response.status().is_success() {
+            let xml = response.text()?;
+            let registry: MartRegistry = from_reader(xml.as_bytes())?;
+            Ok(registry.marts)
+        } else {
+            Err(Box::new(StatusError(response.status())))
+        }
+    }
+}
+
+fn default_on_error_deserializer<'de, D, T>(d: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Default + FromStr + Deserialize<'de>,
+    <T as std::str::FromStr>::Err: Debug,
+{
+    let v = T::deserialize(d);
+    match v {
+        Ok(v) => Ok(v),
+        _ => Ok(T::default()),
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+pub struct MartRegistry {
+    #[serde(rename = "MartURLLocation", default)]
+    pub marts: Vec<MartURLLocation>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MartURLLocation {
+    pub host: String,
+    pub port: usize,
+    pub database: String,
+    // TODO include_datasets should be a collection, not a String
+    #[serde(default, deserialize_with = "default_on_error_deserializer")]
+    pub include_datasets: String,
+    #[serde(default, deserialize_with = "default_on_error_deserializer")]
+    pub visible: bool,
+    #[serde(default, deserialize_with = "default_on_error_deserializer")]
+    pub mart_user: String,
+    #[serde(default, deserialize_with = "default_on_error_deserializer")]
+    pub default: bool,
+    pub server_virtual_schema: String,
+    pub display_name: String,
+    pub path: String,
+    pub name: String,
 }
 
 #[derive(Debug)]
 struct ServerError;
+
 #[derive(Debug)]
 struct StatusError(reqwest::StatusCode);
+
 impl Error for ServerError {}
+
 impl Error for StatusError {}
+
 impl Display for ServerError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         f.write_str("Server error")
@@ -202,7 +267,8 @@ impl QueryBuilder {
 
 #[cfg(test)]
 mod tests {
-    use crate::{MartClient, QueryBuilder};
+    use crate::{MartClient, MartRegistry, MartURLLocation, QueryBuilder};
+    use serde_xml_rs::from_reader;
 
     #[test]
     fn it_works() {
@@ -225,5 +291,29 @@ mod tests {
 ",
             response.unwrap().raw
         );
+    }
+
+    #[test]
+    fn parse_marts() {
+        let data = r##"<MartRegistry>
+    <MartURLLocation database="ensembl_mart_99" default="1" displayName="Ensembl Genes 99" host="www.ensembl.org" includeDatasets="" martUser="" name="ENSEMBL_MART_ENSEMBL" path="/biomart/martservice" port="80" serverVirtualSchema="default" visible="1" />
+</MartRegistry>"##;
+        let registry: MartRegistry = from_reader(data.as_bytes()).unwrap();
+        let expected = MartRegistry {
+            marts: vec![MartURLLocation {
+                host: "www.ensembl.org".to_string(),
+                port: 80,
+                database: "ensembl_mart_99".to_string(),
+                include_datasets: "".to_string(),
+                visible: true,
+                mart_user: "".to_string(),
+                default: true,
+                server_virtual_schema: "default".to_string(),
+                display_name: "Ensembl Genes 99".to_string(),
+                path: "/biomart/martservice".to_string(),
+                name: "ENSEMBL_MART_ENSEMBL".to_string(),
+            }],
+        };
+        assert_eq!(expected, registry);
     }
 }

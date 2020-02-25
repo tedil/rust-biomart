@@ -5,12 +5,13 @@ use std::str::FromStr;
 use csv::StringRecord;
 use itertools::Itertools;
 use maplit::hashmap;
+use serde::{de, Deserialize, Deserializer};
 use serde::de::Unexpected;
 use serde::export::fmt::Debug;
-use serde::{de, Deserialize, Deserializer};
-use serde_derive::Deserialize;
 use serde_xml_rs::from_reader;
 use xmltree::{Element, XMLNode};
+
+mod definitions;
 
 pub struct MartClient {
     server: String,
@@ -360,6 +361,7 @@ mod tests {
                 vec!["202763_at", "209310_s_at", "207500_at"],
             )
             .build();
+        println!("{}", &query.to_string());
         let response = mart_client.query(&query);
         assert_eq!(
             "AFFY HG U133 Plus 2 probe	NCBI gene ID

@@ -59,7 +59,7 @@ pub struct XmlAttribute {
 
 impl ToString for XmlQuery {
     fn to_string(&self) -> String {
-         // FIXME: serde_xml_rs::to_string does not work atm ( https://github.com/RReverser/serde-xml-rs/issues/99 )
+        // FIXME: serde_xml_rs::to_string does not work atm ( https://github.com/RReverser/serde-xml-rs/issues/99 )
         serde_xml_rs::to_string(self).unwrap()
     }
 }

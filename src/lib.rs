@@ -29,6 +29,7 @@ impl MartClient {
     }
 
     fn make_request(&self, query: &[(&str, &str)]) -> Result<String, Box<dyn Error>> {
+        dbg!(&self.client.post(&self.server).query(query));
         let response = self.client.post(&self.server).query(query).send()?;
         if response.status().is_success() {
             let xml = response.text()?;

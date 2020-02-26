@@ -1,15 +1,17 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::str::FromStr;
 
 use csv::StringRecord;
 use itertools::Itertools;
 use maplit::hashmap;
-use serde::{de, Deserialize, Deserializer};
 use serde::de::Unexpected;
 use serde::export::fmt::Debug;
+use serde::{de, Deserialize, Deserializer};
 use serde_xml_rs::from_reader;
 use xmltree::{Element, XMLNode};
+
+use serde_with;
+use serde_with::CommaSeparator;
 
 mod definitions;
 
@@ -72,6 +74,42 @@ impl MartClient {
                 .collect())
         })
     }
+
+    pub fn filters(&self, mart: &str, dataset: &str) -> Result<Vec<FilterInfo>, Box<dyn Error>> {
+        self.request_and_parse(
+            &[("mart", mart), ("dataset", dataset), ("type", "filters")],
+            |tsv| {
+                Ok(csv::ReaderBuilder::new()
+                    .has_headers(false)
+                    .delimiter(b'\t')
+                    .from_reader(tsv.trim().as_bytes())
+                    .deserialize::<FilterInfo>()
+                    .filter_map(Result::ok)
+                    // FIXME: write deserializer that can handle Vec<String> representations like "[v_1, v_2, …, v_n]"
+                    .map(|mut info| match info.options.len() {
+                        0 => info,
+                        1 => {
+                            let s: String = info.options[0]
+                                .trim_matches(|c| c == '[' || c == ']')
+                                .into();
+                            if !s.is_empty() {
+                                info.options[0] = s;
+                            } else {
+                                info.options.clear();
+                            }
+                            info
+                        }
+                        _ => {
+                            let n = info.options.len() - 1;
+                            info.options[0] = info.options[0].trim_matches('[').into();
+                            info.options[n] = info.options[n].trim_matches(']').into();
+                            info
+                        }
+                    })
+                    .collect())
+            },
+        )
+    }
 }
 
 #[derive(Debug)]
@@ -102,6 +140,32 @@ pub struct DatasetInfo {
     unknown_2: usize,
     unknown_3: String,
     date: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FilterType {
+    Boolean,
+    BooleanList,
+    IdList,
+    List,
+    Text,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct FilterInfo {
+    name: String,
+    description: String,
+    #[serde(with = "serde_with::rust::StringWithSeparator::<CommaSeparator>")]
+    options: Vec<String>,
+    full_description: String,
+    filters: String,
+    kind: FilterType,
+    operation: String, // "=", ">=", "<=", "in", "only", "excluded", "=,in", "only,excluded", …
+    unknown_1: String,
+    unknown_2: String,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -297,8 +361,7 @@ impl QueryBuilder {
 fn default_on_error_deserializer<'de, D, T>(d: D) -> Result<T, D::Error>
 where
     D: Deserializer<'de>,
-    T: Default + FromStr + Deserialize<'de>,
-    <T as std::str::FromStr>::Err: Debug,
+    T: Default + Deserialize<'de>,
 {
     let v = T::deserialize(d);
     match v {
@@ -345,6 +408,7 @@ impl Display for StatusError {
 
 #[cfg(test)]
 mod tests {
+    use itertools::Itertools;
     use serde_xml_rs::from_reader;
 
     use crate::{MartClient, MartInfo, MartRegistry, QueryBuilder};
@@ -378,6 +442,13 @@ mod tests {
         let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice".into());
         let datasets = mart_client.datasets("ENSEMBL_MART_ENSEMBL");
         dbg!(datasets);
+    }
+
+    #[test]
+    fn list_filters() {
+        let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice".into());
+        let filters = mart_client.filters("ENSEMBL_MART_ENSEMBL", "hsapiens_gene_ensembl");
+        dbg!(filters.map(|f| f.iter().take(1).cloned().collect_vec()));
     }
 
     #[test]

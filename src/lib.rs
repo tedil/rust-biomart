@@ -111,6 +111,25 @@ impl MartClient {
             },
         )
     }
+
+    pub fn attributes(
+        &self,
+        mart: &str,
+        dataset: &str,
+    ) -> Result<Vec<AttributeInfo>, Box<dyn Error>> {
+        self.request_and_parse(
+            &[("mart", mart), ("dataset", dataset), ("type", "attributes")],
+            |tsv| {
+                Ok(csv::ReaderBuilder::new()
+                    .has_headers(false)
+                    .delimiter(b'\t')
+                    .from_reader(tsv.trim().as_bytes())
+                    .deserialize::<AttributeInfo>()
+                    .filter_map(Result::ok)
+                    .collect())
+            },
+        )
+    }
 }
 
 #[derive(Debug)]
@@ -165,6 +184,18 @@ pub struct FilterInfo {
     filters: String,
     kind: FilterType,
     operation: String, // "=", ">=", "<=", "in", "only", "excluded", "=,in", "only,excluded", …
+    unknown_1: String,
+    unknown_2: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AttributeInfo {
+    name: String,
+    description: String,
+    full_description: String,
+    page: String,
+    #[serde(with = "serde_with::rust::StringWithSeparator::<CommaSeparator>")]
+    formats: Vec<String>,
     unknown_1: String,
     unknown_2: String,
 }
@@ -450,6 +481,13 @@ mod tests {
         let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice".into());
         let filters = mart_client.filters("ENSEMBL_MART_ENSEMBL", "hsapiens_gene_ensembl");
         dbg!(filters.map(|f| f.iter().take(1).cloned().collect_vec()));
+    }
+
+    #[test]
+    fn list_attributes() {
+        let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice".into());
+        let attributes = mart_client.attributes("ENSEMBL_MART_ENSEMBL", "hsapiens_gene_ensembl");
+        dbg!(attributes.map(|f| f.iter().take(1).cloned().collect_vec()));
     }
 
     #[test]

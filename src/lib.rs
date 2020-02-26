@@ -1,17 +1,16 @@
 use std::error::Error;
-use std::fmt::{Display, Formatter};
+
+use crate::definitions::{bool_from_int, default_on_error_deserializer, StatusError};
 
 use csv::StringRecord;
 use itertools::Itertools;
 use maplit::hashmap;
-use serde::de::Unexpected;
+use serde::Deserialize;
 use serde::export::fmt::Debug;
-use serde::{de, Deserialize, Deserializer};
-use serde_xml_rs::from_reader;
-use xmltree::{Element, XMLNode};
-
 use serde_with;
 use serde_with::CommaSeparator;
+use serde_xml_rs::from_reader;
+use xmltree::{Element, XMLNode};
 
 mod definitions;
 
@@ -387,54 +386,6 @@ impl QueryBuilder {
             }))
         }
         query
-    }
-}
-
-fn default_on_error_deserializer<'de, D, T>(d: D) -> Result<T, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Default + Deserialize<'de>,
-{
-    let v = T::deserialize(d);
-    match v {
-        Ok(v) => Ok(v),
-        _ => Ok(T::default()),
-    }
-}
-
-fn bool_from_int<'de, D>(deserializer: D) -> Result<bool, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    match u8::deserialize(deserializer)? {
-        0 => Ok(false),
-        1 => Ok(true),
-        other => Err(de::Error::invalid_value(
-            Unexpected::Unsigned(other as u64),
-            &"zero or one",
-        )),
-    }
-}
-
-#[derive(Debug)]
-struct ServerError;
-
-#[derive(Debug)]
-struct StatusError(reqwest::StatusCode);
-
-impl Error for ServerError {}
-
-impl Error for StatusError {}
-
-impl Display for ServerError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        f.write_str("Server error")
-    }
-}
-
-impl Display for StatusError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        f.write_fmt(format_args!("Error, status code: {}", self.0))
     }
 }
 

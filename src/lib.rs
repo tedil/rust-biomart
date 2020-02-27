@@ -4,6 +4,7 @@ use csv::StringRecord;
 use getset::{Getters, MutGetters, Setters};
 use itertools::Itertools;
 use maplit::hashmap;
+use reqwest::blocking::Client;
 use serde::export::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use serde_with;
@@ -12,6 +13,7 @@ use serde_xml_rs::from_reader;
 use xmltree::{Element, XMLNode};
 
 use crate::definitions::{bool_from_int, default_on_error_deserializer, StatusError};
+use std::time::Duration;
 
 mod definitions;
 
@@ -19,14 +21,18 @@ const REQUEST_ID: &str = "rust-biomart";
 
 pub struct MartClient {
     server: String,
-    client: reqwest::blocking::Client,
+    client: Client,
 }
 
 impl MartClient {
     pub fn new<S: Into<String>>(server: S) -> Self {
         MartClient {
             server: server.into(),
-            client: reqwest::blocking::Client::new(),
+            client: Client::builder()
+                .timeout(Duration::from_secs(60))
+                .gzip(true)
+                .build()
+                .unwrap_or_else(|_| Client::new()),
         }
     }
 
@@ -34,13 +40,13 @@ impl MartClient {
         let q = self
             .client
             .post(&self.server)
+            .header(reqwest::header::ACCEPT_ENCODING, "gzip")
             .query(&[("requestid", REQUEST_ID)])
             .query(query);
-        dbg!(&q);
         let response = q.send()?;
         if response.status().is_success() {
-            let xml = response.text()?;
-            Ok(xml)
+            let text = response.text()?;
+            Ok(text)
         } else {
             Err(Box::new(StatusError(response.status())))
         }

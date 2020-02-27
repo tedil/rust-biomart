@@ -1,5 +1,5 @@
 # rust-biomart
-A simple REST client for biomart.
+A simple rust client for biomart.
 
 # Examples
 - List available marts:

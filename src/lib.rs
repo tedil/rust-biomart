@@ -5,14 +5,16 @@ use crate::definitions::{bool_from_int, default_on_error_deserializer, StatusErr
 use csv::StringRecord;
 use itertools::Itertools;
 use maplit::hashmap;
-use serde::Deserialize;
 use serde::export::fmt::Debug;
+use serde::{Deserialize, Serialize};
 use serde_with;
 use serde_with::CommaSeparator;
 use serde_xml_rs::from_reader;
 use xmltree::{Element, XMLNode};
 
 mod definitions;
+
+const REQUEST_ID: &'static str = "rust-biomart";
 
 pub struct MartClient {
     server: String,
@@ -27,9 +29,14 @@ impl MartClient {
         }
     }
 
-    fn make_request(&self, query: &[(&str, &str)]) -> Result<String, Box<dyn Error>> {
-        dbg!(&self.client.post(&self.server).query(query));
-        let response = self.client.post(&self.server).query(query).send()?;
+    fn make_request<T: Serialize + ?Sized>(&self, query: &T) -> Result<String, Box<dyn Error>> {
+        let q = self
+            .client
+            .post(&self.server)
+            .query(&[("requestid", REQUEST_ID)])
+            .query(query);
+        dbg!(&q);
+        let response = q.send()?;
         if response.status().is_success() {
             let xml = response.text()?;
             Ok(xml)
@@ -38,21 +45,17 @@ impl MartClient {
         }
     }
 
-    fn request_and_parse<P, R>(
-        &self,
-        query: &[(&str, &str)],
-        parser: P,
-    ) -> Result<R, Box<dyn Error>>
+    fn request_and_parse<P, R, T>(&self, query: &T, parser: P) -> Result<R, Box<dyn Error>>
     where
         P: FnOnce(String) -> Result<R, Box<dyn Error>>,
+        T: Serialize + ?Sized,
     {
         self.make_request(query).and_then(parser)
     }
 
     pub fn query(&self, query: &Query) -> Result<Response, Box<dyn Error>> {
         let s = query.to_string();
-        self.make_request(&[("query", &s)])
-            .map(|xml| Response { raw: xml })
+        self.request_and_parse(&[("query", &s)], |xml| Ok(Response { raw: xml }))
     }
 
     pub fn marts(&self) -> Result<Vec<MartInfo>, Box<dyn Error>> {
@@ -182,7 +185,8 @@ pub struct FilterInfo {
     full_description: String,
     filters: String,
     kind: FilterType,
-    operation: String, // "=", ">=", "<=", "in", "only", "excluded", "=,in", "only,excluded", …
+    // "=", ">=", "<=", "in", "only", "excluded", "=,in", "only,excluded", …
+    operation: String,
     unknown_1: String,
     unknown_2: String,
 }
@@ -213,8 +217,8 @@ pub struct MartInfo {
     pub port: usize,
     pub database: String,
     // TODO include_datasets should be a collection, not a String
-    #[serde(default, deserialize_with = "default_on_error_deserializer")]
-    pub include_datasets: String,
+    #[serde(default, with = "serde_with::rust::StringWithSeparator::<CommaSeparator>")]
+    pub include_datasets: Vec<String>,
     #[serde(default, deserialize_with = "default_on_error_deserializer")]
     pub visible: bool,
     #[serde(default, deserialize_with = "default_on_error_deserializer")]
@@ -255,7 +259,8 @@ impl ToString for Query {
 
 impl Default for Query {
     fn default() -> Self {
-        let data = r##"
+        let data = format!(
+            r##"
         <?xml version='1.0' encoding='UTF-8'?><!DOCTYPE Query>
             <Query
                 virtualSchemaName='default'
@@ -264,11 +269,13 @@ impl Default for Query {
                 datasetConfigVersion='0.6'
                 header='1'
                 formatter='TSV'
-                requestid='rust-biomart'
+                requestid='{requestid}'
             >
                 <Dataset name = ''>
                 </Dataset>
-            </Query>"##;
+            </Query>"##,
+            requestid = REQUEST_ID
+        );
         let inner = Element::parse(data.as_bytes()).unwrap();
         Query { inner }
     }
@@ -452,7 +459,7 @@ mod tests {
                 host: "www.ensembl.org".to_string(),
                 port: 80,
                 database: "ensembl_mart_99".to_string(),
-                include_datasets: "".to_string(),
+                include_datasets: vec![],
                 visible: true,
                 mart_user: "".to_string(),
                 default: true,

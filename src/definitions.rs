@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize, Deserializer, de};
 use serde::de::Unexpected;
-use std::fmt::{Display, Formatter};
+use serde::{de, Deserialize, Deserializer, Serialize};
 use std::error::Error;
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -107,8 +107,6 @@ impl ToString for XmlQuery {
 //         let mut query = XmlQuery::default();
 //         query.datasets.push(dataset);
 //         query
-
-
 
 pub(crate) fn default_on_error_deserializer<'de, D, T>(d: D) -> Result<T, D::Error>
 where

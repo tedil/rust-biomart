@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use csv::StringRecord;
-use getset::{CopyGetters, Getters, MutGetters, Setters};
+use getset::{Getters, MutGetters, Setters};
 use itertools::Itertools;
 use maplit::hashmap;
 use serde::export::fmt::Debug;
@@ -225,17 +225,26 @@ impl Response {
     }
 }
 
-#[derive(Debug, Deserialize, Getters, Setters, MutGetters, CopyGetters)]
+#[derive(Debug, Deserialize, Getters, Setters, MutGetters)]
 pub struct DatasetInfo {
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     kind: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     dataset: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     description: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     #[serde(deserialize_with = "bool_from_int")]
     visible: bool,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     version: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     unknown_1: usize,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     unknown_2: usize,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     unknown_3: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     date: String,
 }
 
@@ -251,30 +260,46 @@ pub enum FilterType {
     Unknown,
 }
 
-#[derive(Debug, Clone, Deserialize, Getters, Setters, MutGetters, CopyGetters)]
+#[derive(Debug, Clone, Deserialize, Getters, Setters, MutGetters)]
 pub struct FilterInfo {
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     name: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     description: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     #[serde(with = "serde_with::rust::StringWithSeparator::<CommaSeparator>")]
     options: Vec<String>,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     full_description: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     filters: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     kind: FilterType,
     // "=", ">=", "<=", "in", "only", "excluded", "=,in", "only,excluded", …
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     operation: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     unknown_1: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     unknown_2: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Getters, Setters, MutGetters, CopyGetters)]
+#[derive(Debug, Clone, Deserialize, Getters, Setters, MutGetters)]
 pub struct AttributeInfo {
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     name: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     description: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     full_description: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     page: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     #[serde(with = "serde_with::rust::StringWithSeparator::<CommaSeparator>")]
     formats: Vec<String>,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     unknown_1: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     unknown_2: String,
 }
 
@@ -284,28 +309,38 @@ pub struct MartRegistry {
     pub marts: Vec<MartInfo>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Getters, Setters, MutGetters, CopyGetters)]
+#[derive(Debug, Deserialize, PartialEq, Getters, Setters, MutGetters)]
 #[serde(rename_all = "camelCase")]
 #[serde(rename = "MartURLLocation")]
 pub struct MartInfo {
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     host: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     port: usize,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     database: String,
-    // TODO include_datasets should be a collection, not a String
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     #[serde(
         default,
         with = "serde_with::rust::StringWithSeparator::<CommaSeparator>"
     )]
     include_datasets: Vec<String>,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     #[serde(default, deserialize_with = "default_on_error_deserializer")]
     visible: bool,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     #[serde(default, deserialize_with = "default_on_error_deserializer")]
     mart_user: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     #[serde(default, deserialize_with = "default_on_error_deserializer")]
     default: bool,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     server_virtual_schema: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     display_name: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     path: String,
+    #[getset(set = "pub", get = "pub", get_mut = "pub")]
     name: String,
 }
 

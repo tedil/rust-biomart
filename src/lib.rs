@@ -1,8 +1,7 @@
 use std::error::Error;
 
-use crate::definitions::{bool_from_int, default_on_error_deserializer, StatusError};
-
 use csv::StringRecord;
+use getset::{CopyGetters, Getters, MutGetters, Setters};
 use itertools::Itertools;
 use maplit::hashmap;
 use serde::export::fmt::Debug;
@@ -12,9 +11,11 @@ use serde_with::CommaSeparator;
 use serde_xml_rs::from_reader;
 use xmltree::{Element, XMLNode};
 
+use crate::definitions::{bool_from_int, default_on_error_deserializer, StatusError};
+
 mod definitions;
 
-const REQUEST_ID: &'static str = "rust-biomart";
+const REQUEST_ID: &str = "rust-biomart";
 
 pub struct MartClient {
     server: String,
@@ -58,6 +59,17 @@ impl MartClient {
         self.request_and_parse(&[("query", &s)], |xml| Ok(Response { raw: xml }))
     }
 
+    /// Lists available marts for given registry.
+    ///
+    /// # Example
+    /// ```
+    /// use rust_biomart::MartClient;
+    /// let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice");
+    /// let marts = mart_client.marts()?;
+    /// for mart in &marts {
+    ///     println!("{}", mart.name());
+    /// }
+    /// ```
     pub fn marts(&self) -> Result<Vec<MartInfo>, Box<dyn Error>> {
         self.request_and_parse(&[("type", "registry")], |xml| {
             let registry: MartRegistry = from_reader(xml.as_bytes())
@@ -66,6 +78,22 @@ impl MartClient {
         })
     }
 
+    /// Lists available datasets for a given mart.
+    ///
+    /// # Arguments
+    ///
+    /// * `mart` - Name of the Mart for which available datasets are to be queried. See also `MartClient::name`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rust_biomart::MartClient;
+    /// let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice");
+    /// let datasets = mart_client.datasets("ENSEMBL_MART_ENSEMBL")?;
+    /// for info in &datasets {
+    ///     println!("{}: {}", info.dataset(), info.description());
+    /// }
+    /// ```
     pub fn datasets(&self, mart: &str) -> Result<Vec<DatasetInfo>, Box<dyn Error>> {
         self.request_and_parse(&[("mart", mart), ("type", "datasets")], |xml| {
             Ok(csv::ReaderBuilder::new()
@@ -78,6 +106,23 @@ impl MartClient {
         })
     }
 
+    /// Lists available filters for a given mart+dataset.
+    ///
+    /// # Arguments
+    ///
+    /// * `mart` - Name of the Mart. See also `MartClient::name`.
+    /// * `dataset` - Name of the dataset. See also `DatasetInfo::dataset`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rust_biomart::MartClient;
+    /// let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice");
+    /// let filters = mart_client.filters("ENSEMBL_MART_ENSEMBL", "hsapiens_gene_ensembl")?;
+    /// for filter in &filters {
+    ///     println!("{}: {}", filter.name(), filter.description());
+    /// }
+    /// ```
     pub fn filters(&self, mart: &str, dataset: &str) -> Result<Vec<FilterInfo>, Box<dyn Error>> {
         self.request_and_parse(
             &[("mart", mart), ("dataset", dataset), ("type", "filters")],
@@ -114,6 +159,23 @@ impl MartClient {
         )
     }
 
+    /// Lists available attributes for a given mart+dataset.
+    ///
+    /// # Arguments
+    ///
+    /// * `mart` - Name of the Mart. See also `MartClient::name`.
+    /// * `dataset` - Name of the dataset. See also `DatasetInfo::dataset`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rust_biomart::MartClient;
+    /// let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice");
+    /// let attributes = mart_client.attributes("ENSEMBL_MART_ENSEMBL", "hsapiens_gene_ensembl")?;
+    /// for attribute in &attributes {
+    ///     println!("{}: {}", attribute.name(), attribute.description());
+    /// }
+    /// ```
     pub fn attributes(
         &self,
         mart: &str,
@@ -140,7 +202,20 @@ pub struct Response {
 }
 
 impl Response {
-    pub fn data(&self) -> Vec<StringRecord> {
+    pub fn raw(&self) -> &str {
+        &self.raw
+    }
+
+    pub fn header(&self) -> Option<StringRecord> {
+        csv::ReaderBuilder::new()
+            .delimiter(b'\t')
+            .from_reader(self.raw.as_bytes())
+            .headers()
+            .ok()
+            .cloned()
+    }
+
+    pub fn records(&self) -> Vec<StringRecord> {
         csv::ReaderBuilder::new()
             .delimiter(b'\t')
             .from_reader(self.raw.as_bytes())
@@ -150,7 +225,7 @@ impl Response {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Getters, Setters, MutGetters, CopyGetters)]
 pub struct DatasetInfo {
     kind: String,
     dataset: String,
@@ -176,7 +251,7 @@ pub enum FilterType {
     Unknown,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Getters, Setters, MutGetters, CopyGetters)]
 pub struct FilterInfo {
     name: String,
     description: String,
@@ -191,7 +266,7 @@ pub struct FilterInfo {
     unknown_2: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Getters, Setters, MutGetters, CopyGetters)]
 pub struct AttributeInfo {
     name: String,
     description: String,
@@ -209,26 +284,29 @@ pub struct MartRegistry {
     pub marts: Vec<MartInfo>,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Getters, Setters, MutGetters, CopyGetters)]
 #[serde(rename_all = "camelCase")]
 #[serde(rename = "MartURLLocation")]
 pub struct MartInfo {
-    pub host: String,
-    pub port: usize,
-    pub database: String,
+    host: String,
+    port: usize,
+    database: String,
     // TODO include_datasets should be a collection, not a String
-    #[serde(default, with = "serde_with::rust::StringWithSeparator::<CommaSeparator>")]
-    pub include_datasets: Vec<String>,
+    #[serde(
+        default,
+        with = "serde_with::rust::StringWithSeparator::<CommaSeparator>"
+    )]
+    include_datasets: Vec<String>,
     #[serde(default, deserialize_with = "default_on_error_deserializer")]
-    pub visible: bool,
+    visible: bool,
     #[serde(default, deserialize_with = "default_on_error_deserializer")]
-    pub mart_user: String,
+    mart_user: String,
     #[serde(default, deserialize_with = "default_on_error_deserializer")]
-    pub default: bool,
-    pub server_virtual_schema: String,
-    pub display_name: String,
-    pub path: String,
-    pub name: String,
+    default: bool,
+    server_virtual_schema: String,
+    display_name: String,
+    path: String,
+    name: String,
 }
 
 enum FilterOperation {
@@ -416,14 +494,14 @@ mod tests {
             )
             .build();
         println!("{}", &query.to_string());
-        let response = mart_client.query(&query);
+        let response = mart_client.query(&query).unwrap();
         assert_eq!(
             "AFFY HG U133 Plus 2 probe	NCBI gene ID
 209310_s_at	837
 207500_at	838
 202763_at	836
 ",
-            response.unwrap().raw
+            response.raw()
         );
     }
 

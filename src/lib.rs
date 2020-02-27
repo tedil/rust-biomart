@@ -405,7 +405,7 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice".into());
+        let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice");
         let query = QueryBuilder::new()
             .mart("ensembl")
             .dataset("hsapiens_gene_ensembl")

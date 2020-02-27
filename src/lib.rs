@@ -22,9 +22,9 @@ pub struct MartClient {
 }
 
 impl MartClient {
-    pub fn new(server: String) -> Self {
+    pub fn new<S: Into<String>>(server: S) -> Self {
         MartClient {
-            server,
+            server: server.into(),
             client: reqwest::blocking::Client::new(),
         }
     }
@@ -429,21 +429,21 @@ mod tests {
 
     #[test]
     fn list_datasets() {
-        let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice".into());
+        let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice");
         let datasets = mart_client.datasets("ENSEMBL_MART_ENSEMBL");
         dbg!(datasets);
     }
 
     #[test]
     fn list_filters() {
-        let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice".into());
+        let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice");
         let filters = mart_client.filters("ENSEMBL_MART_ENSEMBL", "hsapiens_gene_ensembl");
         dbg!(filters.map(|f| f.iter().take(1).cloned().collect_vec()));
     }
 
     #[test]
     fn list_attributes() {
-        let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice".into());
+        let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice");
         let attributes = mart_client.attributes("ENSEMBL_MART_ENSEMBL", "hsapiens_gene_ensembl");
         dbg!(attributes.map(|f| f.iter().take(1).cloned().collect_vec()));
     }

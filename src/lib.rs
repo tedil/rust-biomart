@@ -64,11 +64,14 @@ impl MartClient {
     /// # Example
     /// ```
     /// use rust_biomart::MartClient;
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice");
     /// let marts = mart_client.marts()?;
     /// for mart in &marts {
     ///     println!("{}", mart.name());
     /// }
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn marts(&self) -> Result<Vec<MartInfo>, Box<dyn Error>> {
         self.request_and_parse(&[("type", "registry")], |xml| {
@@ -88,11 +91,14 @@ impl MartClient {
     ///
     /// ```
     /// use rust_biomart::MartClient;
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice");
     /// let datasets = mart_client.datasets("ENSEMBL_MART_ENSEMBL")?;
     /// for info in &datasets {
     ///     println!("{}: {}", info.dataset(), info.description());
     /// }
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn datasets(&self, mart: &str) -> Result<Vec<DatasetInfo>, Box<dyn Error>> {
         self.request_and_parse(&[("mart", mart), ("type", "datasets")], |xml| {
@@ -117,11 +123,14 @@ impl MartClient {
     ///
     /// ```
     /// use rust_biomart::MartClient;
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice");
     /// let filters = mart_client.filters("ENSEMBL_MART_ENSEMBL", "hsapiens_gene_ensembl")?;
     /// for filter in &filters {
     ///     println!("{}: {}", filter.name(), filter.description());
     /// }
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn filters(&self, mart: &str, dataset: &str) -> Result<Vec<FilterInfo>, Box<dyn Error>> {
         self.request_and_parse(
@@ -170,11 +179,14 @@ impl MartClient {
     ///
     /// ```
     /// use rust_biomart::MartClient;
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice");
     /// let attributes = mart_client.attributes("ENSEMBL_MART_ENSEMBL", "hsapiens_gene_ensembl")?;
     /// for attribute in &attributes {
     ///     println!("{}: {}", attribute.name(), attribute.description());
     /// }
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn attributes(
         &self,

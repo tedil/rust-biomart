@@ -3,7 +3,7 @@ A simple rust client for biomart.
 
 # Examples
 - List available marts:
-    ```
+    ```rust
     use rust_biomart::MartClient;
     let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice");
     let marts = mart_client.marts()?;
@@ -12,7 +12,7 @@ A simple rust client for biomart.
     }
     ```
 - List available datasets for a Mart:
-    ```
+    ```rust
     use rust_biomart::MartClient;
     let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice");
     let datasets = mart_client.datasets("ENSEMBL_MART_ENSEMBL")?;
@@ -21,7 +21,7 @@ A simple rust client for biomart.
     }
     ```
 - List available filters for a dataset:
-    ```
+    ```rust
     use rust_biomart::MartClient;
     let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice");
     let filters = mart_client.filters("ENSEMBL_MART_ENSEMBL", "hsapiens_gene_ensembl")?;
@@ -30,7 +30,7 @@ A simple rust client for biomart.
     }
     ```
 - List available attributes for a dataset:
-    ```
+    ```rust
     use rust_biomart::MartClient;
     let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice");
     let attributes = mart_client.attributes("ENSEMBL_MART_ENSEMBL", "hsapiens_gene_ensembl")?;
@@ -39,7 +39,7 @@ A simple rust client for biomart.
     }
     ```
 - Perform a query:
-    ```
+    ```rust
     use rust_biomart::MartClient;
     let mart_client = MartClient::new("http://ensembl.org:80/biomart/martservice");
     let query = QueryBuilder::new()
